@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+#
+# Blocks secrets and private local paths from being committed.
+#
+# .gitignore is the first line of defense. This is the one that survives the
+# ways .gitignore gets bypassed: `git add -f`, a rewritten ignore file, or
+# `git add -A` run from a parent directory with a differently-scoped ignore.
+#
+set -euo pipefail
+
+FAIL=0
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+say() { printf '\n\033[31m[pre-commit BLOCKED]\033[0m %s\n' "$*" >&2; }
+
+STAGED="$(git diff --cached --name-only --diff-filter=ACMR)"
+[[ -n "$STAGED" ]] || exit 0
+
+# --- 1. .env must never be committed ----------------------------------------
+BAD_ENV="$(printf '%s\n' "$STAGED" | grep -E '(^|/)\.env$' || true)"
+if [[ -n "$BAD_ENV" ]]; then
+  say ".env is staged. It has never been committed in any revision -- keep it that way."
+  FAIL=1
+fi
+
+# --- 2. staged CONTENT must not contain live credentials --------------------
+# Checks the staged blob, not the working file, so a last-second edit cannot
+# slip past. Built up in pieces because a pattern list nobody can read is a
+# pattern list nobody extends.
+P='sk-ant-[A-Za-z0-9_-]{10,}'                 # Anthropic
+P="$P|dapi[0-9a-f]{32}"                       # Databricks PAT
+P="$P|gh[pousr]_[A-Za-z0-9]{36}"              # GitHub token
+P="$P|github_pat_[A-Za-z0-9_]{22,}"           # GitHub fine-grained PAT
+P="$P|AKIA[0-9A-Z]{16}"                       # AWS access key id
+P="$P|xox[baprs]-[A-Za-z0-9-]{10,}"           # Slack
+P="$P|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\."   # JWT
+P="$P|-----BEGIN [A-Z ]*PRIVATE KEY-----"     # PEM
+P="$P|(postgres|postgresql|mysql|mongodb|redis|amqp)://[^ \"']*:[^ \"'@]*@"
+PATTERNS="$P"
+
+# --- 3. private local paths -------------------------------------------------
+# Absolute paths disclose the directory layout of the machine this was built on.
+PRIVATE_PATHS='/Users/[a-z]|/home/[a-z]|C:\\Users\\'
+#
+# Project-specific patterns -- for example the name of a private parent
+# directory -- belong in `.private-patterns`, one extended regex per line. That
+# file is gitignored and never committed, ON PURPOSE:
+#
+#   a guard that names the thing it is hiding publishes it.
+#
+# An earlier version of this hook hardcoded such a name directly here. It was
+# written with a character class so the file would not match its own pattern,
+# which meant the one file disclosing the private directory was the one file the
+# guard could never catch. It shipped before anyone noticed. Keep the secrets
+# out of the scanner.
+if [[ -f "${REPO_ROOT}/.private-patterns" ]]; then
+  while IFS= read -r line; do
+    [[ -n "$line" && "$line" != \#* ]] && PRIVATE_PATHS="${PRIVATE_PATHS}|${line}"
+  done < "${REPO_ROOT}/.private-patterns"
+fi
+
+while IFS= read -r f; do
+  [[ -n "$f" ]] || continue
+  BLOB="$(git show ":$f" 2>/dev/null)" || continue
+  if printf '%s' "$BLOB" | grep -qIE "$PATTERNS"; then
+    say "possible live credential in staged content: $f"
+    FAIL=1
+  fi
+  if printf '%s' "$BLOB" | grep -qIE "$PRIVATE_PATHS"; then
+    say "private local path in staged content: $f"
+    printf '%s' "$BLOB" | grep -nIE "$PRIVATE_PATHS" | head -3 | sed 's/^/    /' >&2
+    FAIL=1
+  fi
+done <<< "$STAGED"
+
+if (( FAIL )); then
+  printf '\n  Override only if you are certain:  git commit --no-verify\n\n' >&2
+  exit 1
+fi
+exit 0

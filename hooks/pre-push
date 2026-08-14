@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+#
+# Last gate before anything leaves this machine.
+#
+# pre-commit guards one commit at a time. This guards the whole HISTORY being
+# pushed, which is the case that actually matters: a public remote is added and
+# everything goes at once, or an old commit somewhere in the range carries
+# something it should not.
+#
+set -euo pipefail
+
+REMOTE_NAME="${1:-}"
+ZERO='0000000000000000000000000000000000000000'
+FAIL=0
+
+say() { printf '\n\033[31m[pre-push BLOCKED]\033[0m %s\n' "$*" >&2; }
+
+while read -r _local_ref local_sha _remote_ref remote_sha; do
+  [[ "$local_sha" == "$ZERO" ]] && continue          # branch deletion
+
+  if [[ "$remote_sha" == "$ZERO" ]]; then
+    RANGE="$local_sha"                                # new branch: whole history
+  else
+    RANGE="${remote_sha}..${local_sha}"
+  fi
+
+  FILES="$(git log --pretty=format: --name-only "$RANGE" | sort -u | grep -v '^$' || true)"
+  [[ -n "$FILES" ]] || continue
+
+  BAD="$(printf '%s\n' "$FILES" | grep -E '(^|/)\.env$' || true)"
+  if [[ -n "$BAD" ]]; then
+    say "history being pushed to '${REMOTE_NAME}' contains files that must never be published:"
+    printf '%s\n' "$BAD" | sed 's/^/    /' >&2
+    printf '\n  These are present somewhere in %s, not necessarily in the newest commit.\n' "$RANGE" >&2
+    printf '  A gitignore fix does NOT remove them from history -- the history must be rewritten.\n' >&2
+    FAIL=1
+  fi
+done
+
+if (( FAIL )); then
+  printf '\n  Override only if you are certain:  git push --no-verify\n\n' >&2
+  exit 1
+fi
+
+exit 0
