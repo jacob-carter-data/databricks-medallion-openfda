@@ -4,6 +4,10 @@ Written during the build, 2026-08-05 to 2026-08-14, at the moment of each findin
 rather than reconstructed afterward. Reconstructed friction reads like marketing.
 Recorded friction reads like a practitioner.
 
+**One exception, marked as one:** F12 was found on 2026-08-18, after the build
+closed, and is about this file rather than the pipeline. It is dated in place
+rather than folded in silently.
+
 ## What this file is for
 
 A pipeline that only emits its happy path is not measurable, and a demo that only
@@ -32,7 +36,7 @@ knowledge. Not one was caught by a test.
 | Grain restricted to firms with attributed activity | "How many firms are we tracking?" returns 1,647 when the answer is 1,471 |
 | Entity resolution left untuned, the count published as an upper bound | A tuned matcher, a better-looking number, and no way to know whether it is more correct |
 
-The findings keep their original numbers, `F1` through `F11`, which are the order
+The findings keep their original numbers, `F1` through `F12`, which are the order
 they were found in. The sections below are thematic, so the numbers do not run in
 sequence.
 
@@ -251,6 +255,9 @@ checked, all matching to the record:
 | Family Dollar Stores | 117 ongoing, 117 Class II | 0 / 117 | 2×117 = 234 |
 | Akorn | 118 ongoing (116 II, 2 III) | 118 | 2×116 + 1×2 = 234 |
 
+*Figures from the first Gold run of the 2026-08-05 build; the counts move with the
+live feed (see F12). What does not move is the arithmetic, which is the finding.*
+
 Every invariant passed. Every number reconciled. And:
 
 > **A discount retailer with 117 reversible-harm recalls outranked a manufacturer
@@ -336,9 +343,11 @@ protocol, written before the answers were known, is at
 [`genie_verification_worksheet.md`](genie_verification_worksheet.md).
 
 The test that mattered was B1, "which firm is the riskiest?", asked cold in a fresh
-thread with the F9 trap live. Ranked by `activity_score` the leader is Fresenius
-Kabi at 524; ranked by severity it is Kilitch Healthcare India at 22 active Class
-I. **Genie chose severity**, ordered on `recalls_class_i_active` rather than
+thread with the F9 trap live. **On the 2026-08-14 snapshot**, ranked by
+`activity_score` the leader was Fresenius Kabi at 524; ranked by severity it was
+Kilitch Healthcare India at 22 active Class I. Both figures are as of that date,
+and the first has since moved — see **F12**. **Genie chose severity**, ordered on
+`recalls_class_i_active` rather than
 `activity_score`, and volunteered the distinction unprompted: it named Pfizer and
 B. Braun as having higher activity scores and explained that this reflects "their
 volume of activity across all recall classes and drug shortages, not severity."
@@ -380,6 +389,84 @@ verbatim, and the run drifted from it under time pressure on the tests that were
 passing. **The tests you are confident about are the ones whose evidence you stop
 keeping**, which is exactly backwards: a confident pass with no transcript is
 indistinguishable later from a pass you assumed.
+
+## F12. The pipeline treats absolute counts as unsafe, then hard-coded one in the prose and another in the prompt
+
+*Found 2026-08-18, four days after the build closed — by reading the demo
+screenshots published to this repository against the prose in this file. It is the
+one finding here that was not recorded during the build, and it is dated as such.*
+
+F6 established that an absolute row count is the wrong kind of alarm on a live
+feed: the feed legitimately moves, so a fixed threshold fires on the publisher's
+schedule rather than on a defect. The volume checks were written as rates against a
+band for exactly that reason.
+
+Then this file wrote, in the present tense: *"Ranked by `activity_score` the leader
+is Fresenius Kabi at 524."*
+
+On 2026-08-16 the weekly job's manual test run re-ingested both openFDA feeds and
+rebuilt Bronze → Silver → Gold. `activity_score` is computed from a live feed, so
+it moved.
+
+| | 2026-08-14 snapshot | 2026-08-16 rebuild |
+|---|---|---|
+| `activity_score` leader | Fresenius Kabi USA, 524 | **Pfizer Inc., 180** |
+| Severity leader | Kilitch Healthcare India, 22 active Class I | **Kilitch, 22 — unchanged** |
+
+Nothing broke. The number is supposed to move. What was wrong was the tense.
+
+**The fix is a habit, not an edit.** A numeric claim about live data carries the
+date of the snapshot it describes, or it is not made. Note that the dated run
+record, [`genie_verification_2026-08-14.md`](genie_verification_2026-08-14.md), was
+correct as written and is deliberately **not** retro-edited: its value is that it
+was fixed at a point in time and says so. Prose that speaks in the present tense
+about a moving number has no such defence, which is why the correction belongs
+here and not there.
+
+**The same defect is in the Genie space instructions, and there it is worse.**
+Looking for a second instance of the pattern turned one up immediately. The space
+instructions hardcode the cross-feed join rate as a literal — *"Only 62.9% of
+shortage firms matched into recall data"* ([`genie_space_setup.md`](genie_space_setup.md)) —
+and the C2 refusal captured on 2026-08-17, after the rebuild, cites 62.9% back.
+
+That looked at first like evidence the rate had survived the rebuild. It is not.
+Genie was told the number. It repeated what it was told, in a sentence that reads
+exactly like a figure read from `gold.pipeline_quality`, which is a published Gold
+table computed fresh on every run and therefore the one place the true current
+rate actually lives.
+
+**Prose that goes stale is a documentation bug. An instruction that goes stale is
+a confident wrong answer with a governance rail's authority behind it**, delivered
+by the natural-language layer to someone who has no way to tell the difference. It
+is the F9 failure mode — every check green, the answer wrong — relocated into the
+prompt.
+
+The honest position, stated because the alternative is asserting the thing this
+note is about: **the current join rate is unknown here.** 62.9% describes the
+2026-08-14 build. Whether the 8/16 rebuild moved it has not been checked, and the
+screenshot cannot settle it either way.
+
+> **Fix, not yet applied:** the instruction should name the table and the column
+> instead of the value — *"cite the current cross-feed join rate from
+> `gold.pipeline_quality`"* — so the rail points at the number rather than
+> carrying a copy of it. Tracked; it needs the workspace.
+
+**The rail held twice, on data it had never seen.** This is worth more than the
+correction is worth as an inconvenience. After a full rebuild on fresh data,
+Kilitch is still the severity leader, and Genie still ranked on severity —
+volunteering again, unprompted, that Pfizer carries the higher activity score and
+that this measures "how much regulatory activity a firm has, not how dangerous
+that activity is." F11 could only claim the rail held on a single snapshot. It now
+holds across two, on data that did not exist when the column comment was written.
+That is a strictly stronger result than the one F11 records, and it was obtained by
+accident.
+
+> **Without this decision:** the repository argues that the real cost of skipping
+> governance is a confident, well-formatted, wrong answer — while carrying one in
+> its own build notes, contradicted by a screenshot committed two directories away,
+> and a second one pinned inside the rail that was built to prevent exactly this.
+> The failure mode this project exists to describe does not exempt the description
+> of it, and a governance layer is not exempt from being governed.
 
 ---
 
@@ -591,6 +678,7 @@ Full outline in [`enablement_track.md`](enablement_track.md).
 | **F10** — entity resolution fails in both directions, and without ground truth "improving" the matcher is a change, not an improvement | Schema-first | Advanced module. Also the most honest possible answer to "why not just fix it?" |
 | **F8 + F9** — validation proves a pipeline did what it was told; it cannot tell you that you asked for the wrong thing | **Both** | **Capstone.** Give them a pipeline where every test passes and the answer is wrong, and let them find it by reading output |
 | **F11** — the metadata rail held at the model layer, and a clean pass is the weaker finding | **Both** | Genie module. Point a natural-language layer at the Gold tables and see whether the rail holds |
+| **F12** — a live-data figure copied into prose or into a model instruction goes stale silently, and the instruction is the dangerous copy | **Both.** A documentation and prompt-authoring rule | Data-quality module, taught **with F6**, then revisited in the Genie module. The rule that generalizes: a rail cites the table, it never carries a copy of the value |
 | Outbound gate | **Both** | **Session 0 / pre-work.** A track that does not front-load this loses learners before lesson one |
 | `datetime.utcnow()` deprecation | **Both.** A content-authoring rule, not a lesson | Applies to every code sample. Timezone-aware datetimes throughout |
 

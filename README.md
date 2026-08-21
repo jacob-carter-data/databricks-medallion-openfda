@@ -41,7 +41,7 @@ verification record, then the code.
 
 | Path | What it is |
 |---|---|
-| [`docs/field_notes.md`](docs/field_notes.md) | **Start here.** Findings F1–F11, written during the build. Each carries what a build without that decision would have shipped instead |
+| [`docs/field_notes.md`](docs/field_notes.md) | **Start here.** Findings F1–F12, written during the build. Each carries what a build without that decision would have shipped instead |
 | [`docs/genie_verification_2026-08-14.md`](docs/genie_verification_2026-08-14.md) | The eight-test Genie run of 2026-08-14. All eight passed. It grades its own evidence, marks two passes as weaker than the other six, and says outright that a failure would have been the more useful finding |
 | [`docs/genie_verification_worksheet.md`](docs/genie_verification_worksheet.md) | The blank protocol, kept alongside the run so the tests are visibly older than the results |
 | [`docs/enablement_track.md`](docs/enablement_track.md) | An outline for getting a team productive on Databricks and safe to put an AI layer on top, built from the findings rather than from a feature list |
@@ -60,6 +60,9 @@ the name:
 |---|---|---|---|
 | Kilitch Healthcare India | 22 | 22 | 110 |
 | Family Dollar Stores | 0 | 117, all Class II | 234 |
+
+*Figures from the first Gold run of the 2026-08-05 build. Both counts move with the
+live feed. The arithmetic is the finding, and it does not.*
 
 Class I means a reasonable probability of death or serious harm. Class II means
 temporary and reversible. A weighted sum ranked a retailer twice as risky as a
@@ -92,7 +95,10 @@ evidence was not retained.
 rate, source freshness per feed, and entity-resolution split candidates, because
 a pipeline that only emits its happy path is not measurable.
 
-Known limits, stated rather than waited for:
+Known limits, stated rather than waited for. *The figures describe the 2026-08-14
+Gold build. A rebuild on 2026-08-16 re-ran the pipeline on fresh feeds; whether it
+moved these rates has not been checked, and the current values live in
+`gold.pipeline_quality` rather than here. See F12.*
 
 - **Only 62.9% of shortage firms match into enforcement.** The join is a full
   outer (built as two left joins onto a firm cross-reference) with an explicit
